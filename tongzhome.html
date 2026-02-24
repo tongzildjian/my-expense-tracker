@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Expense Tracker PWA</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="manifest" href="./manifest.json">
+    <style>
+        :root { --bg: #1a1c23; --card: #242731; --text: #ffffff; --primary: #6c5dd3; --success: #4ade80; --danger: #ff6b6b; --warning: #ffc107; --kbank: #138f2d; --uob: #003366; --cimb: #e21a22; --ttb: #004996; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding-bottom: 100px; }
+        .card { background-color: var(--card); border: none; border-radius: 20px; color: var(--text); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .dash-card { background: linear-gradient(135deg, #6c5dd3 0%, #a78bfa 100%); color: white; padding: 25px; margin-bottom: 20px; }
+        .dash-value { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+        .dash-label { font-size: 11px; opacity: 0.8; text-transform: uppercase; font-weight: 700; }
+        
+        .bank-chip { padding: 12px; border-radius: 15px; background: rgba(255,255,255,0.05); border-left: 4px solid #fff; }
+        .bank-name { font-size: 12px; font-weight: 700; opacity: 0.9; }
+        .bank-value { font-size: 15px; font-weight: 800; }
+        
+        .form-control, .form-select { background-color: #1f2128; border: 1px solid #353945; color: white; border-radius: 12px; padding: 12px; }
+        .btn-primary { background-color: var(--primary); border: none; border-radius: 12px; padding: 15px; font-weight: 600; }
+        
+        .nav-tabs { border: none; background: rgba(255,255,255,0.05); border-radius: 15px; padding: 5px; }
+        .nav-tabs .nav-link { border: none; color: #808191; border-radius: 10px; font-weight: 600; }
+        .nav-tabs .nav-link.active { background-color: var(--primary); color: white !important; }
+        
+        .table { color: var(--text); border-color: #353945; }
+        .history-item { border-bottom: 1px solid #353945; padding: 12px 0; }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <!-- Dashboard Header -->
+        <div class="card dash-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <div class="dash-label">ยอดคงเหลือ (เดือนนี้)</div>
+                    <div class="dash-value" id="netBalance">฿0.00</div>
+                </div>
+                <button class="btn btn-sm btn-dark rounded-pill" onclick="loadData()"><i class="fas fa-sync-alt" id="syncIcon"></i></button>
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 10px;">
+                        <div class="dash-label">รายรับ</div>
+                        <div style="font-size: 16px; font-weight: 700;" id="totalIncome">฿0.00</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 10px;">
+                        <div class="dash-label">รายจ่าย</div>
+                        <div style="font-size: 16px; font-weight: 700;" id="totalExpense">฿0.00</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank/Card Summary Row -->
+        <div class="row g-2 mb-4">
+            <div class="col-3">
+                <div class="bank-chip" style="border-color: var(--kbank);">
+                    <div class="bank-name text-success">KBANK</div>
+                    <div class="bank-value" id="val-KBANK">0</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="bank-chip" style="border-color: var(--ttb);">
+                    <div class="bank-name text-info">TTB</div>
+                    <div class="bank-value" id="val-TTB">0</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="bank-chip" style="border-color: var(--uob);">
+                    <div class="bank-name text-primary">UOB</div>
+                    <div class="bank-value" id="val-UOB">0</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="bank-chip" style="border-color: var(--cimb);">
+                    <div class="bank-name text-danger">CIMB</div>
+                    <div class="bank-value" id="val-CIMB">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-4 nav-fill" id="myTab" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#entry">บันทึก</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#summary">สรุป & กราฟ</button></li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="entry">
+                <div class="card p-4 mb-4">
+                    <form id="financeForm">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">ประเภท</label>
+                                <select class="form-select" id="type" required>
+                                    <option value="Expense">❌ รายจ่าย</option>
+                                    <option value="Income">✅ รายรับ</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">หมวดหมู่</label>
+                                <select class="form-select" id="category" required></select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">จำนวนเงิน</label>
+                                <input type="number" step="0.01" class="form-control form-control-lg" id="amount" placeholder="0.00" required>
+                            </div>
+                            <div class="col-12">
+                                <input type="text" class="form-control" id="description" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
+                            </div>
+                            <div class="col-12 mt-4">
+                                <button type="submit" id="saveBtn" class="btn btn-primary w-100 py-3">บันทึกรายการ</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="card p-3"><h6 class="mb-3">รายการล่าสุด</h6><div id="miniHistory"></div></div>
+            </div>
+
+            <div class="tab-pane fade" id="summary">
+                <div class="card p-4 mb-4">
+                    <div class="d-flex justify-content-between mb-3">
+                        <h6>รายจ่ายแยกตามหมวดหมู่</h6>
+                        <select class="form-select form-select-sm w-auto" id="filterRange">
+                            <option value="day">รายวัน</option>
+                            <option value="month" selected>รายเดือน</option>
+                            <option value="year">รายปี</option>
+                        </select>
+                    </div>
+                    <canvas id="expenseChart" style="max-height: 250px;"></canvas>
+                </div>
+                <div class="card p-3"><h6>ประวัติทั้งหมด</h6><div class="table-responsive"><table class="table table-hover mt-3"><tbody id="historyBody"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyLG7ISUswAanVxDzH9iVkIr3D0eWa-l7FS4RPx8B9bFDaodLQfD4ShLs5EfD3Krl4cZw/exec';
+        let allTransactions = [];
+        const CATEGORIES_INCOME = ["เงินเดือนประจำ", "Freelance"];
+        const CATEGORIES_EXPENSE = ["เงินให้ภรรยา", "ผ่อน KBank", "ผ่อน CIMB", "ผ่อน UOB", "ผ่อน TTB", "เติม Gas/น้ำมัน", "Shopee/Lazada/Tiktok", "ค่าอาหาร/ร้านสะดวกซื้อ", "จิปาถะ"];
+        let expenseChart;
+
+        function setupCategories() {
+            const catSelect = document.getElementById('category');
+            catSelect.innerHTML = '';
+            const categories = document.getElementById('type').value === 'Income' ? CATEGORIES_INCOME : CATEGORIES_EXPENSE;
+            categories.forEach(cat => catSelect.innerHTML += `<option value="${cat}">${cat}</option>`);
+        }
+        document.getElementById('type').onchange = setupCategories;
+        setupCategories();
+
+        async function loadData() {
+            document.getElementById('syncIcon').classList.add('fa-spin');
+            try {
+                const response = await fetch(CLOUD_URL);
+                const rawData = await response.json();
+                if (Array.isArray(rawData)) {
+                    allTransactions = rawData.map(row => ({
+                        dateStr: new Date(row[1]).toISOString().split('T')[0],
+                        type: row[2],
+                        category: row[3],
+                        amount: parseFloat(row[4]) || 0
+                    })).filter(t => t.amount > 0);
+                }
+                updateUI();
+            } catch (err) { console.error(err); }
+            document.getElementById('syncIcon').classList.remove('fa-spin');
+        }
+
+        document.getElementById('financeForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('saveBtn'); btn.disabled = true;
+            const payload = {
+                date: new Date().toISOString().split('T')[0],
+                type: document.getElementById('type').value,
+                category: document.getElementById('category').value,
+                amount: parseFloat(document.getElementById('amount').value),
+                description: document.getElementById('description').value
+            };
+            try {
+                await fetch(CLOUD_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                setTimeout(() => { loadData(); this.reset(); setupCategories(); btn.disabled = false; }, 1200);
+            } catch (err) { btn.disabled = false; }
+        };
+
+        function updateUI() {
+            const range = document.getElementById('filterRange').value;
+            const now = new Date();
+            const filtered = allTransactions.filter(t => {
+                const d = new Date(t.dateStr.replace(/-/g, '/'));
+                if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                if (range === 'year') return d.getFullYear() === now.getFullYear();
+                if (range === 'day') return d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+                return true;
+            });
+
+            let inc = 0, exp = 0;
+            const catMap = {}, bankMap = { "KBANK":0, "TTB":0, "UOB":0, "CIMB":0 };
+            
+            filtered.forEach(t => {
+                if (t.type === 'Income') inc += t.amount;
+                else { 
+                    exp += t.amount; 
+                    catMap[t.category] = (catMap[t.category] || 0) + t.amount;
+                    if(t.category.includes("KBank")) bankMap["KBANK"] += t.amount;
+                    if(t.category.includes("TTB")) bankMap["TTB"] += t.amount;
+                    if(t.category.includes("UOB")) bankMap["UOB"] += t.amount;
+                    if(t.category.includes("CIMB")) bankMap["CIMB"] += t.amount;
+                }
+            });
+
+            const fmt = (v) => v.toLocaleString('th-TH');
+            document.getElementById('totalIncome').innerText = '฿' + fmt(inc);
+            document.getElementById('totalExpense').innerText = '฿' + fmt(exp);
+            document.getElementById('netBalance').innerText = '฿' + fmt(inc - exp);
+            
+            for(let key in bankMap) document.getElementById(`val-${key}`).innerText = bankMap[key].toLocaleString();
+
+            const hist = document.getElementById('historyBody');
+            const mini = document.getElementById('miniHistory');
+            hist.innerHTML = ''; mini.innerHTML = '';
+            filtered.sort((a,b) => new Date(b.dateStr) - new Date(a.dateStr)).forEach((t, i) => {
+                const row = `<tr style="font-size:13px;"><td>${t.dateStr}</td><td>${t.category}</td><td class="text-end ${t.type==='Income'?'text-success':'text-danger'}">${t.amount.toLocaleString()}</td></tr>`;
+                hist.innerHTML += row;
+                if(i < 5) mini.innerHTML += `<div class="history-item d-flex justify-content-between"><div><div style="font-size:13px;font-weight:700;">${t.category}</div><div style="font-size:10px;opacity:0.5;">${t.dateStr}</div></div><div class="${t.type==='Income'?'text-success':'text-danger'}" style="font-weight:800;">${t.amount.toLocaleString()}</div></div>`;
+            });
+            updateChart(catMap);
+        }
+
+        function updateChart(map) {
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            if (expenseChart) expenseChart.destroy();
+            expenseChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: Object.keys(map), datasets: [{ data: Object.values(map), backgroundColor: ['#6c5dd3', '#4ade80', '#ff6b6b', '#ffc107', '#0d6efd', '#6f42c1', '#17a2b8', '#fd7e14'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', font: { size: 9 } } } } }
+            });
+        }
+        document.getElementById('filterRange').onchange = updateUI;
+        loadData();
+    </script>
+</body>
+</html>
