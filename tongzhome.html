@@ -64,8 +64,16 @@
     <!-- Header -->
     <div class="dash-header">
         <div class="container text-center">
-            <div class="dash-label">ยอดคงเหลือสุทธิ (เดือนนี้)</div>
-            <div class="dash-value mb-1" id="netBalance">฿0.00</div>
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div style="width: 40px;"></div> <!-- Spacer -->
+                <div>
+                    <div class="dash-label">ยอดคงเหลือสุทธิ (เดือนนี้)</div>
+                    <div class="dash-value" id="netBalance">฿0.00</div>
+                </div>
+                <button class="btn btn-link text-white p-0" onclick="loadData()" style="width: 40px;">
+                    <i class="fas fa-sync-alt" id="headerSyncBtn"></i>
+                </button>
+            </div>
             <div id="syncStatus" class="opacity-75">
                 <i class="fas fa-circle-notch fa-spin me-1" id="syncIcon"></i> กำลังอัปเดต...
             </div>
@@ -163,10 +171,41 @@
 
             <!-- Tab: Chart -->
             <div class="tab-pane fade" id="tab-chart">
-                <div class="card p-4 mb-4 text-center">
-                    <h6 class="fw-bold mb-4">สัดส่วนค่าใช้จ่ายทั่วไป</h6>
-                    <div style="height: 250px;"><canvas id="expenseChart"></canvas></div>
+                <div class="card p-4 mb-4">
+                    <h6 class="fw-bold mb-3">💰 สรุปภาพรวมรายงาน</h6>
+                    <div class="row text-center">
+                        <div class="col-6 border-end">
+                            <div class="small text-muted">รายรับรวม</div>
+                            <div class="h5 fw-bold text-success" id="report-income">฿0.00</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="small text-muted">รายจ่ายรวมทั้งหมด</div>
+                            <div class="h5 fw-bold text-danger" id="report-total-expense">฿0.00</div>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-4">
+                        <div class="card p-3 h-100">
+                            <h6 class="fw-bold mb-3 text-center" style="font-size: 14px;">รายรับตามหมวดหมู่</h6>
+                            <div style="height: 200px;"><canvas id="incomeChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="card p-3 h-100">
+                            <h6 class="fw-bold mb-3 text-center" style="font-size: 14px;">รายจ่ายประจำ (Fixed)</h6>
+                            <div style="height: 200px;"><canvas id="fixedChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="card p-3 h-100">
+                            <h6 class="fw-bold mb-3 text-center" style="font-size: 14px;">รายจ่ายทั่วไป (Extra)</h6>
+                            <div style="height: 200px;"><canvas id="expenseChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card p-4">
                     <h6 class="fw-bold mb-3">ประวัติการใช้จ่ายทั้งหมด</h6>
                     <div id="fullHistory"></div>
@@ -189,7 +228,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbyLG7ISUswAanVxDzH9iVkIr3D0eWa-l7FS4RPx8B9bFDaodLQfD4ShLs5EfD3Krl4cZw/exec';
-    
         
         const CATEGORIES = {
             "Income": ["เงินเดือนประจำ", "Freelance", "อื่นๆ"],
@@ -199,6 +237,14 @@
 
         let allData = [];
         let expenseChart;
+
+        // --- UTILITIES ---
+        function setSyncStatus(text, type) {
+            const el = document.getElementById('syncStatus');
+            const icon = document.getElementById('syncIcon');
+            el.innerHTML = `<i class="fas fa-circle-notch ${type === 'secondary' ? 'fa-spin' : ''} me-1" id="syncIcon"></i> ${text}`;
+            el.className = `opacity-75 text-${type === 'secondary' ? 'white' : type}`;
+        }
 
         function setupCategories() {
             const cat = document.getElementById('category');
@@ -210,16 +256,25 @@
         setupCategories();
 
         async function loadData() {
-            document.getElementById('syncIcon').classList.add('fa-spin');
+            setSyncStatus("กำลังอัปเดต...", "secondary");
             try {
                 const response = await fetch(CLOUD_URL + '?t=' + Date.now());
                 const raw = await response.json();
                 allData = Array.isArray(raw) ? raw.map(r => ({
-                    date: r[1], type: r[2], category: r[3], amount: parseFloat(r[4]) || 0, desc: r[5] || ''
+                    date: r[1], 
+                    type: r[2], 
+                    category: r[3], 
+                    amount: parseFloat(r[4]) || 0, 
+                    desc: r[5] || ''
                 })).filter(t => t.amount > 0) : [];
+                
+                console.log("Loaded Data:", allData); // เพิ่ม Log เพื่อตรวจสอบข้อมูล
                 updateUI();
-            } catch(e) {}
-            document.getElementById('syncIcon').classList.remove('fa-spin');
+                setSyncStatus("ออนไลน์", "white");
+            } catch(e) {
+                console.error("Fetch Error:", e);
+                setSyncStatus("เชื่อมต่อล้มเหลว", "danger");
+            }
         }
 
         document.getElementById('financeForm').onsubmit = async function(e) {
@@ -233,7 +288,7 @@
                 description: document.getElementById('description').value
             };
             try {
-                await fetch(CLOUD_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(data) });
+                await fetch(CLOUD_URL, { method: 'POST', body: JSON.stringify(data) });
                 setTimeout(() => { loadData(); this.reset(); setupCategories(); btn.disabled = false; }, 2000);
             } catch(e) { btn.disabled = false; }
         };
@@ -243,7 +298,7 @@
             setSyncStatus("กำลังล้างข้อมูล...", "warning");
             try {
                 // สำหรับ GAS เราจะส่ง Type: "CLEAR" ไปจัดการ (ต้องการแก้ไขโค้ด GAS เพิ่มเติมเล็กน้อย)
-                await fetch(CLOUD_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "CLEAR_ALL" }) });
+                await fetch(CLOUD_URL, { method: 'POST', body: JSON.stringify({ action: "CLEAR_ALL" }) });
                 alert("ส่งคำสั่งล้างข้อมูลแล้ว กรุณารอสักครู่แล้วรีเฟรชหน้าเว็บ");
                 setTimeout(loadData, 3000);
             } catch(e) { alert("ล้มเหลว"); }
@@ -254,33 +309,46 @@
             const curMonth = now.getMonth(), curYear = now.getFullYear();
             
             const filtered = allData.filter(t => {
-                const d = new Date(t.date.replace(/-/g, '/'));
-                return d.getMonth() === curMonth && d.getFullYear() === curYear;
+                const d = new Date(t.date); // ใช้ new Date() ตรงๆ กับ ISO String
+                return !isNaN(d.getTime()) && d.getMonth() === curMonth && d.getFullYear() === curYear;
             });
 
             let inc = 0, fix = 0, ext = 0;
             const bankMap = {"KBANK":0, "TTB":0, "UOB":0, "CIMB":0, "HOUSE":0};
-            const catMap = {};
+            const incomeCategoryMap = {};
+            const fixedCategoryMap = {};
+            const extraCategoryMap = {};
 
             filtered.forEach(t => {
-                if(t.type === 'Income') inc += t.amount;
-                else {
-                    if(t.type === 'Fixed') fix += t.amount; else ext += t.amount;
-                    if(t.type === 'Extra') catMap[t.category] = (catMap[t.category] || 0) + t.amount;
+                if(t.type === 'Income') {
+                    inc += t.amount;
+                    incomeCategoryMap[t.category] = (incomeCategoryMap[t.category] || 0) + t.amount;
+                } else {
+                    if(t.type === 'Fixed') {
+                        fix += t.amount;
+                        fixedCategoryMap[t.category] = (fixedCategoryMap[t.category] || 0) + t.amount;
+                    } else { // Extra
+                        ext += t.amount;
+                        extraCategoryMap[t.category] = (extraCategoryMap[t.category] || 0) + t.amount;
+                    }
                     
-                    if(t.category.includes("KBank")) bankMap["KBANK"] += t.amount;
-                    if(t.category.includes("TTB")) bankMap["TTB"] += t.amount;
-                    if(t.category.includes("UOB")) bankMap["UOB"] += t.amount;
-                    if(t.category.includes("CIMB")) bankMap["CIMB"] += t.amount;
-                    if(t.category.includes("บ้าน")) bankMap["HOUSE"] += t.amount;
+                    const catName = t.category.toUpperCase();
+                    if(catName.includes("KBANK")) bankMap["KBANK"] += t.amount;
+                    if(catName.includes("TTB")) bankMap["TTB"] += t.amount;
+                    if(catName.includes("UOB")) bankMap["UOB"] += t.amount;
+                    if(catName.includes("CIMB")) bankMap["CIMB"] += t.amount;
+                    if(catName.includes("บ้าน") || catName.includes("HOUSE")) bankMap["HOUSE"] += t.amount;
                 }
             });
 
-            const fmt = (v) => v.toLocaleString('th-TH');
+            const fmt = (v) => v.toLocaleString('th-TH', { minimumFractionDigits: 2 });
             document.getElementById('netBalance').innerText = '฿' + fmt(inc - fix - ext);
             document.getElementById('totalIncome').innerText = '฿' + fmt(inc);
             document.getElementById('totalFixed').innerText = '฿' + fmt(fix);
             document.getElementById('totalExtra').innerText = '฿' + fmt(ext);
+
+            document.getElementById('report-income').innerText = '฿' + fmt(inc);
+            document.getElementById('report-total-expense').innerText = '฿' + fmt(fix + ext);
             
             for(let k in bankMap) document.getElementById(`val-${k}`).innerText = fmt(bankMap[k]);
 
@@ -290,12 +358,14 @@
             mini.innerHTML = ''; full.innerHTML = '';
             
             filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach((t, i) => {
+                const d = new Date(t.date);
+                const dateStr = d.toLocaleDateString('th-TH');
                 const item = `
                     <div class="history-item d-flex justify-content-between align-items-center">
                         <div>
                             <div class="fw-bold" style="font-size:14px;">${t.category}</div>
                             <div class="type-pill ${t.type==='Fixed'?'type-fixed':'type-extra'}">${t.type==='Fixed'?'งวดประจำ':'ใช้ทั่วไป'}</div>
-                            <span class="small text-muted ms-2">${t.date}</span>
+                            <span class="small text-muted ms-2">${dateStr}</span>
                         </div>
                         <div class="fw-bold ${t.type==='Income'?'text-success':'text-danger'}">${t.type==='Income'?'+':'-'}${t.amount.toLocaleString()}</div>
                     </div>`;
@@ -303,21 +373,44 @@
                 full.innerHTML += item;
             });
 
-            updateChart(catMap);
+            createOrUpdateChart('incomeChart', incomeCategoryMap);
+            createOrUpdateChart('fixedChart', fixedCategoryMap);
+            createOrUpdateChart('expenseChart', extraCategoryMap);
         }
 
-        function updateChart(map) {
-            const ctx = document.getElementById('expenseChart').getContext('2d');
-            if(expenseChart) expenseChart.destroy();
-            expenseChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(map),
-                    datasets: [{ data: Object.values(map), backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'], borderWidth: 0 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
-            });
+        let incomeChartInstance, fixedChartInstance, expenseChartInstance; // เก็บ instance ของ Chart
+
+        function createOrUpdateChart(chartId, dataMap) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            const labels = Object.keys(dataMap);
+            const data = Object.values(dataMap);
+            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#facc15', '#fb7185', '#a78bfa'];
+
+            let chartInstance;
+            if (chartId === 'incomeChart') {
+                if (incomeChartInstance) incomeChartInstance.destroy();
+                incomeChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+                });
+            } else if (chartId === 'fixedChart') {
+                if (fixedChartInstance) fixedChartInstance.destroy();
+                fixedChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+                });
+            } else if (chartId === 'expenseChart') {
+                if (expenseChartInstance) expenseChartInstance.destroy();
+                expenseChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+                });
+            }
         }
+
 
         loadData();
     </script>
